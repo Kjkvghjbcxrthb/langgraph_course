@@ -1,0 +1,110 @@
+import asyncio
+
+import requests
+from langchain.agents import create_agent
+from langchain.tools import tool
+from langchain_anthropic import ChatAnthropic
+from langchain_core.messages import HumanMessage
+from bs4 import BeautifulSoup
+
+from settings import settings
+
+#текст по ссылке
+#@tool
+def fetch_url(url:str)->str:
+    """Извлечь текстовое содержимое из URL"""
+    response = requests.get(url, timeout=10.0)
+    soup = BeautifulSoup(response.text, "html.parser")
+    result = soup.get_text()
+    print(len(result))
+    return result
+document = fetch_url('https://docs.langchain.com/oss/python/deepagents/rag#rag-chains')
+
+
+#сплит документа
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size = 1000, chunk_overlap = 0
+)
+splitted_text = text_splitter.split_text(document)
+print(len(splitted_text))
+
+
+#эмбеддинг модель, на выходе - модель, которая возвращает из массива строк массив векторов
+from langchain_openai import OpenAIEmbeddings
+from settings import settings, get_balance
+embeddings_model = OpenAIEmbeddings(
+    base_url = 'https://api.proxyapi.ru/openai/v1',
+    api_key = settings.PROXY_API_KEY
+)
+
+
+#создание векторного хранилища
+from langchain_core.vectorstores import InMemoryVectorStore
+vector_store = InMemoryVectorStore(embedding=embeddings_model)
+
+
+#добавим документы в хранилище
+from langchain_core.documents import Document
+documents = [
+    Document(
+        page_content = doc,
+        metadata = {"source": "article"}
+    )
+    for doc in splitted_text
+]
+print(len(documents))
+vector_store.add_documents(
+    documents=documents
+)
+
+
+
+#LLM модель
+from langchain_openai import ChatOpenAI
+api_key = settings.PROXY_API_KEY
+llm = ChatOpenAI(
+    model = 'gpt-5.5',
+    base_url = 'https://api.proxyapi.ru/openai/v1',
+    api_key = api_key,
+    temperature = 0
+)
+
+
+#запрос
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
+def get_answer(query:str) -> str:
+    response = vector_store.similarity_search(query, k = 1)[0].page_content
+    print("VECTOR STORE RESPONSE:", response)
+    messages = [SystemMessage(content = 'You are perfectly can use documents to answer the question.'),
+                HumanMessage(content = f"""please answer on my question: {query}, using inly this document: {response}""")]
+
+    print("\nLLM RESPONSE:", llm.invoke(messages).content)
+
+
+get_answer('how I can split text?')
+print(get_balance(settings.PROXY_API_KEY))
+
+
+out:
+
+VECTOR STORE RESPONSE: Load: Load your data sources into Document objects.
+Split: Use text splitters to break large Documents into smaller chunks. This is useful both for indexing data and passing it to a model, as large chunks are harder to search over and either do not fit in a model’s finite context window or use more tokens than necessary.
+Embed: Embeddings models convert each chunk into a numeric vector that captures its meaning, enabling similarity search over your content.
+Store: Use a VectorStore to index chunks and their embeddings for retrieval.
+
+LLM RESPONSE: To split text, use **text splitters** to break large **Document** objects into smaller chunks.
+
+This is useful because smaller chunks are easier to:
+
+- **Index**
+- **Search over**
+- **Pass to a model**
+- Fit within a model’s **context window**
+- Avoid using more tokens than necessary
+
+So the process is:
+
+1. **Load** your data into `Document` objects.
+2. **Split** the large Documents into smaller chunks using text splitters.
+3. Then you can **embed** and **store** those chunks for retrieval.
