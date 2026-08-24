@@ -77,7 +77,7 @@ def get_answer(query:str) -> str:
     response = vector_store.similarity_search(query, k = 1)[0].page_content
     print("VECTOR STORE RESPONSE:", response)
     messages = [SystemMessage(content = 'You are perfectly can use documents to answer the question.'),
-                HumanMessage(content = f"""please answer on my question: {query}, using inly this document: {response}""")]
+                HumanMessage(content = f"""please answer on my question: {query}, using only this document: {response}""")]
 
     print("\nLLM RESPONSE:", llm.invoke(messages).content)
 
