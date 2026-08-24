@@ -1,0 +1,148 @@
+#основная концепция - отдаешь ссылку, получаешь описание видео
+from langchain_core.runnables import RunnableLambda
+
+#функция скачивания видео
+import urllib.request
+def download(url):
+    filename = 'C:/Users/Владислав/Desktop/langgraph_course/src/3.9video_homework/example.mp4'
+    urllib.request.urlretrieve(url, filename)#скачано
+    print('DOWNLOADED')
+    return filename
+
+#разделение видео на части по 20 секунд
+from moviepy import VideoFileClip
+def chunk_it(filename):
+    clip = VideoFileClip(filename)
+    duration_in_seconds = clip.duration
+    path = 'C:/Users/Владислав/Desktop/langgraph_course/src/3.9video_homework/chunks/'
+    for i in range(int(duration_in_seconds/20+1)):
+        start = i*20
+        stop = min(i*20+20,duration_in_seconds)
+        #print(start, stop)
+        chunk = clip.subclipped(start, stop)
+        chunk.write_videofile(path + f'chunk_{i}.mp4', codec="libx264", logger=None)#записан чанк
+    clip.close()
+    print(f'SPLITTED on {len(os.listdir(path))} files')
+    return path
+
+#создание массива путей файлов для batch
+import os
+def file_paths(path):
+    print('PATHS ARRAY PREPARED')
+    return ['C:/Users/Владислав/Desktop/langgraph_course/src/3.9video_homework/chunks/' + i for i in os.listdir(path)]
+
+#модель распознавания видео
+import base64
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.messages import HumanMessage, SystemMessage
+from settings import settings
+api_key = settings.PROXY_API_KEY
+llm_video = ChatGoogleGenerativeAI(
+    model="gemini-3.1-pro-preview",
+    base_url='https://api.proxyapi.ru/google',
+    api_key = api_key
+)
+
+#описание видео:
+os.environ["LANGSMITH_TRACING"] = "false"
+os.environ["LANGCHAIN_TRACING_V2"] = "false"
+#описание 1 чанка
+def describe_chunk(path):
+    with open(path, "rb") as f:
+        video_data = base64.standard_b64encode(f.read()).decode("utf-8")
+    message = HumanMessage(content=[
+        {"type": "text", "text": """Decribe shortly in 5-7 sentences what this video is about."""},
+        {
+            "type": "video",
+            "base64": video_data,
+            "mime_type": "video/mp4",
+        }
+        ])
+    response = llm_video.invoke([message]).content
+    #print(len(response))
+    return response[0]['text']
+
+#runnable описание 1 чанка
+runnable_describe = RunnableLambda(describe_chunk)
+
+#runnable описание пачки
+batched_describe = RunnableLambda(lambda paths: runnable_describe.batch(paths))
+
+#соединение ответов в один и создание краткого описания
+from langchain_openai import ChatOpenAI
+llm = ChatOpenAI(
+    model = 'gpt-5.5',
+    api_key = api_key,
+    base_url = 'https://api.proxyapi.ru/openai/v1',
+    temperature = 0
+)
+def unite(answers):
+    #print(answers)
+    #print(len(answers))
+    full_text = ' '.join(answers)
+    print(f'UNITED {len(answers)} descriptions.')
+    messages = [
+        SystemMessage(content = [{"type": "text", "text": """You are a professional reteller."""}]),      
+        SystemMessage(content = [{"type": "text", "text": """You get a text that prepared with unification of several texts blocks that describe one video. Each of these texts blocks explains stricly one part of video. You should explain what this video about. Chronologically a text you get corresponds to a video."""}]),
+        SystemMessage(content = [{"type": "text", "text": """You have to repeat a structure of video."""}]),
+        SystemMessage(content = [{"type": "text", "text": """Please, make a text not long. """}]),
+        HumanMessage(content = [{"type": "text", "text": f"""Retell, what this text about: {full_text}"""}])
+    ]
+    response = llm.invoke(messages).content
+    print(len(response))
+    return response
+
+#LCEL
+#на шаге batched_describe происходит распараллеливание цепочки и на шаге unite объединение
+runnable =  RunnableLambda(download) | \
+            RunnableLambda(chunk_it) | \
+            RunnableLambda(file_paths) | \
+            batched_describe | \
+            RunnableLambda(unite)
+
+#тест
+result = runnable.invoke('https://drive.usercontent.google.com/download?id=17RnkfVMXpLMnd9PpGNuQy7_131CWGZ2P&export=download')
+print(result)
+
+#тест
+
+result = runnable.invoke('https://drive.usercontent.google.com/download?id=17RnkfVMXpLMnd9PpGNuQy7_131CWGZ2P&export=download')
+
+print(result)
+
+ 
+
+out
+
+DOWNLOADED
+SPLITTED on 32 files
+PATHS ARRAY PREPARED
+UNITED 32 descriptions.
+2471
+The video is a countdown of the **top seven fastest street-legal motorcycles of 2025**.
+
+It opens with a title card and track footage, then starts the ranking:
+
+**Number 7 — Ducati Panigale V4**  
+A red Ducati is shown in detail. The narration presents it as an Italian superbike with an 1103cc V4 engine, 209 horsepower, race-inspired electronics, aerodynamic winglets, and a top speed over 185 mph.
+
+**Number 6 — Suzuki Hayabusa**  
+The video shows a white Hayabusa in scenic locations and close-ups of its engine, seats, dashboard, and aerodynamic front. It is described as a legendary hyperbike with a 1340cc engine, 188 horsepower, smooth acceleration, and a top speed near 186 mph.
+
+**Number 5 — Kawasaki Ninja ZX-10R KRT Edition**  
+The green-and-black Kawasaki is presented through static shots and track footage. The narrator highlights its 998cc engine, 196 horsepower, 186 mph top speed, winglets, quick shifter, lightweight chassis, TFT display, ride modes, traction control, and aggressive riding position.
+
+**Number 4 — Aprilia RSV4**  
+A black Aprilia RSV4 is shown on a racetrack, followed by action shots. It is described as a powerful Italian superbike with a 1099cc V4 engine, 217 horsepower, speeds over 189 mph, aerodynamic winglets, Brembo brakes, semi-active suspension, and advanced rider aids.
+
+**Number 3 — BMW M 1000 RR**  
+The BMW is shown in its M colors and on track. The voiceover emphasizes German engineering, a 999cc inline-four engine, 205 horsepower, a top speed above 195 mph, carbon fiber fairings, winglets, advanced suspension, traction control, ride modes, and strong M brakes.
+
+**Number 2 — Yamaha R1 Race**  
+The black Yamaha R1 Race is introduced as a refined track-focused bike adapted for street use. It features a 998cc crossplane inline-four engine, 200 horsepower, speeds over 200 mph, MotoGP-derived technology, aerodynamic fairings, a Deltabox frame, advanced suspension, TFT display, traction control, cornering ABS, and engine braking management.
+
+**Number 1 — Kawasaki Ninja H2R**  
+The top spot goes to the Kawasaki Ninja H2R. The video presents it as an extreme hyperbike with a supercharged 998cc engine producing 310 horsepower. It highlights its sharp aerodynamic design, wings, TFT display, IMU, traction control, cornering management, launch control, LED lighting, and powerful exhaust sound.
+
+The video ends with riding footage, a friendly rider giving a thumbs-up, and a call to comment, like, and subscribe.
+ 
