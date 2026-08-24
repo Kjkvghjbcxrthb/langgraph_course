@@ -74,7 +74,7 @@ llm = ChatOpenAI(
 #запрос
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
 def get_answer(query:str) -> str:
-    response = vector_store.similarity_search(query, k = 1)[0].page_content
+    response = vector_store.similarity_search(query, k = 1)[0].page_content#обязательное обращение при запросе
     print("VECTOR STORE RESPONSE:", response)
     messages = [SystemMessage(content = 'You are perfectly can use documents to answer the question.'),
                 HumanMessage(content = f"""please answer on my question: {query}, using only this document: {response}""")]
