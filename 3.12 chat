@@ -70,17 +70,17 @@ while True:
 #please explane what are tools from url https://docs.langchain.com/oss/python/langchain/agents
 #please explane briefly in 3-5 sentences what is Agent state from url https://docs.langchain.com/oss/python/langchain/agents
 
-
 out
+
 VLAD: please explane briefly in 3-5 sentences what is Agent state from url https://docs.langchain.com/oss/python/langchain/agents
-***переписанный запрос с учетом tools*** : Please briefly explain in 3–5 sentences what “Agent state” means in LangChain agents.
+***переписанный запрос с учетом tools*** : Please briefly explain in 3–5 sentences what “Agent state” is in LangChain agents.
 ***длина текста с сайта*** : 52505
 
-LLM after tool:  In LangChain agents, “Agent state” is the execution context managed through `AgentState`. `AgentState` is a typed dictionary that holds the current conversation history and any custom fields needed by tools and middleware. Its built-in field is `messages`, which stores the full conversation history for the current thread and is append-only. Middleware hooks receive the current state and can return updates that are merged back into it.
+LLM after tool:  “Agent state” in LangChain agents is managed through `AgentState`, a typed dictionary that holds the current conversation history and any custom fields your tools and middleware need. Its built-in field is `messages`, which contains the full append-only conversation history for the current thread. `AgentState` is also used as the type signature for middleware hooks, which receive the current state and can return updates to merge back into it. You can add custom fields, such as `user_id` or `call_count`, by subclassing `AgentState` and passing it to `create_agent` with `state_schema=`.
 
 VLAD: are you sure? where did you get it?
 
-LLM:  Yes. I got it from the text you provided, specifically the **“Agent state”** section.
+LLM:  Yes. I got it from the **“Agent state”** section in the text you provided.
 
 The key lines are:
 
@@ -90,8 +90,8 @@ and:
 
 > “The built-in field is: messages — The full conversation history for the current thread. Append-only: new messages are added, never replaced.”
 
-I also used this line:
+Also:
 
-> “Hooks receive the current state and can return a dict of updates to merge back into it.”
+> “AgentState is also the type signature for every node-style middleware hook...”
 
 VLAD: exit
