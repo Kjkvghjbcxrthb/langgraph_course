@@ -1,0 +1,86 @@
+import asyncio
+
+import requests
+from langchain.agents import create_agent
+from langchain.tools import tool
+from langchain_anthropic import ChatAnthropic
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from bs4 import BeautifulSoup
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from settings import settings
+from langchain_openai import OpenAIEmbeddings
+from settings import settings, get_balance
+from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_core.documents import Document
+
+#текст по ссылке
+@tool
+def fetch_url(url:str)->str:
+    """This tool returns from article from the link.
+    always use ONLY this tools if you are asked to get info grom the link."""
+    #парсинг сайта
+    response = requests.get(url, timeout=10.0)
+    soup = BeautifulSoup(response.text, "html.parser")
+    document = soup.get_text()
+    #return 'tools are very good'
+    return document
+#print(fetch_url('https://docs.langchain.com/oss/python/langchain/rag#rag-chains','how I can split text?'))
+#print(fetch_url('https://docs.langchain.com/oss/python/langchain/rag#rag-chains','why does RAG usefull?'))
+
+
+#LLM модель
+from langchain_openai import ChatOpenAI
+api_key = settings.PROXY_API_KEY
+llm = ChatOpenAI(
+    model = 'gpt-5.5',
+    api_key = api_key,
+    base_url = 'https://api.proxyapi.ru/openai/v1',
+    temperature = 0
+)
+llm_with_tools = llm.bind_tools([fetch_url])
+
+#чат с моделью
+messages = []
+while True:
+    x = input('\nVLAD: ')
+    if x == 'exit':
+        break
+    messages.append(HumanMessage(content=x, name = 'VLAD'))
+    response = llm_with_tools.invoke(messages)
+    if len(response.tool_calls) > 0:
+        for i in response.tool_calls:
+            #print('i', i)
+            if i['name']=='fetch_url':
+                tool_result = fetch_url.invoke(i['args'])
+                x2 = llm.invoke(f'please, rewrite this text without url: {x}').content
+                print('***переписанный запрос с учетом tools*** :', x2)
+                print('***длина текста с сайта*** :',len(str(tool_result)))
+                messages.append(HumanMessage(content=f'{x2}. please, answer, using ONLY this text: {tool_result}', name = 'VLAD'))
+                response = llm_with_tools.invoke(messages)
+                messages.append(response)
+                print('\nLLM after tool: ', response.content)
+    else:
+        messages.append(response)
+        print('\nLLM: ', response.content)
+
+#for i in messages:
+#    print('\n\n', i)
+
+
+#please explane what are tools from url https://docs.langchain.com/oss/python/langchain/agents
+#please explane briefly in 3-5 sentences what is Agent state from url https://docs.langchain.com/oss/python/langchain/agents
+
+
+out
+VLAD: please explane briefly in 3-5 sentences what is Agent state from url https://docs.langchain.com/oss/python/langchain/agents
+***переписанный запрос с учетом tools*** : Please briefly explain in 3–5 sentences what Agent state is in LangChain agents.
+***длина текста с сайта*** : 52505
+
+LLM after tool:  Agent state in LangChain is managed through `AgentState`, a typed dictionary that holds the agent’s execution context. It includes the current conversation history in the built-in `messages` field, which is append-only: new messages are added and never replaced. `AgentState` is also used as the type signature for middleware hooks like `before_model` and `after_model`, which can read the current state and return updates to merge back into it. You can add custom fields, such as `user_id` or `call_count`, by subclassing `AgentState` and passing it to `create_agent` with `state_schema=`.
+
+VLAD: are you sure?
+
+LLM:  Yes. The provided text says: “Every agent manages its execution context through `AgentState`, a typed dictionary that holds the current conversation history and any custom fields your tools and middleware need.” It also states that the built-in `messages` field contains “the full conversation history for the current thread” and is append-only. So the explanation is consistent with the source text.
+
+VLAD: exit
+
