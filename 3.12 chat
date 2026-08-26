@@ -70,17 +70,28 @@ while True:
 #please explane what are tools from url https://docs.langchain.com/oss/python/langchain/agents
 #please explane briefly in 3-5 sentences what is Agent state from url https://docs.langchain.com/oss/python/langchain/agents
 
-
 out
+
 VLAD: please explane briefly in 3-5 sentences what is Agent state from url https://docs.langchain.com/oss/python/langchain/agents
-***переписанный запрос с учетом tools*** : Please briefly explain in 3–5 sentences what Agent state is in LangChain agents.
+***переписанный запрос с учетом tools*** : Please briefly explain in 3–5 sentences what Agent State is in LangChain agents.
 ***длина текста с сайта*** : 52505
 
-LLM after tool:  Agent state in LangChain is managed through `AgentState`, a typed dictionary that holds the agent’s execution context. It includes the current conversation history in the built-in `messages` field, which is append-only: new messages are added and never replaced. `AgentState` is also used as the type signature for middleware hooks like `before_model` and `after_model`, which can read the current state and return updates to merge back into it. You can add custom fields, such as `user_id` or `call_count`, by subclassing `AgentState` and passing it to `create_agent` with `state_schema=`.
+LLM after tool:  Agent State in LangChain agents is managed through `AgentState`, a typed dictionary that holds the agent’s execution context. It includes the current conversation history in the built-in `messages` field, where new messages are appended and never replaced. `AgentState` is also used by middleware hooks, which receive the current state and can return updates to merge back into it. You can add custom fields, such as `user_id` or `call_count`, by subclassing `AgentState` and passing it to `create_agent` with `state_schema=`.
 
-VLAD: are you sure?
+VLAD: are you sure? where did you get it?
 
-LLM:  Yes. The provided text says: “Every agent manages its execution context through `AgentState`, a typed dictionary that holds the current conversation history and any custom fields your tools and middleware need.” It also states that the built-in `messages` field contains “the full conversation history for the current thread” and is append-only. So the explanation is consistent with the source text.
+LLM:  Yes. I got it from the **“Agent state”** section of the text you provided.
+
+The key lines are:
+
+> “Every agent manages its execution context through AgentState, a typed dictionary that holds the current conversation history and any custom fields your tools and middleware need.”
+
+> “The built-in field is: messages — The full conversation history for the current thread. Append-only: new messages are added, never replaced.”
+
+> “AgentState is also the type signature for every node-style middleware hook…”
+
+> “To add custom fields… subclass AgentState and pass the subclass to create_agent via state_schema=…”
 
 VLAD: exit
+
 
