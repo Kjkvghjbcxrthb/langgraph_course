@@ -1,14 +1,17 @@
 import asyncio
 
-from langchain.agents import create_agent
-from settings import settings
-from langchain.tools import tool
-from pydantic import BaseModel
-from langchain_openai import ChatOpenAI
-api_key = settings.PROXY_API_KEY
-from langchain_core.messages import HumanMessage
 import requests
+from langchain.agents import create_agent
+from langchain.tools import tool
+from langchain_anthropic import ChatAnthropic
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from bs4 import BeautifulSoup
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from settings import settings
+from langchain_openai import OpenAIEmbeddings
+from settings import settings, get_balance
+from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_core.documents import Document
 
 #текст по ссылке
 @tool
@@ -21,54 +24,74 @@ def fetch_url(url:str)->str:
     document = soup.get_text()
     #return 'tools are very good'
     return document
+#print(fetch_url('https://docs.langchain.com/oss/python/langchain/rag#rag-chains','how I can split text?'))
+#print(fetch_url('https://docs.langchain.com/oss/python/langchain/rag#rag-chains','why does RAG usefull?'))
+
 
 #LLM модель
+from langchain_openai import ChatOpenAI
+api_key = settings.PROXY_API_KEY
 llm = ChatOpenAI(
     model = 'gpt-5.5',
     api_key = api_key,
-    base_url = 'https://api.proxyapi.ru/openai/v1'
+    base_url = 'https://api.proxyapi.ru/openai/v1',
+    temperature = 0
 )
+llm_with_tools = llm.bind_tools([fetch_url])
 
-#агент
-tools = [fetch_url]
-system_prompt="""You are a helpful assistant. Be concise and accurate.
-you answer the questions about langchain agent.
-use this url https://docs.langchain.com/oss/python/langchain/agents to find information about langchain agent.
+#чат с моделью
+messages = []
+while True:
+    x = input('\nVLAD: ')
+    if x == 'exit':
+        break
+    messages.append(HumanMessage(content=x, name = 'VLAD'))
+    response = llm_with_tools.invoke(messages)
+    if len(response.tool_calls) > 0:
+        for i in response.tool_calls:
+            #print('i', i)
+            if i['name']=='fetch_url':
+                tool_result = fetch_url.invoke(i['args'])
+                x2 = llm.invoke(f'please, rewrite this text without url: {x}').content
+                print('***переписанный запрос с учетом tools*** :', x2)
+                print('***длина текста с сайта*** :',len(str(tool_result)))
+                messages.append(HumanMessage(content=f'{x2}. please, answer, using ONLY this text: {tool_result}', name = 'VLAD'))
+                response = llm_with_tools.invoke(messages)
+                messages.append(response)
+                print('\nLLM after tool: ', response.content)
+    else:
+        messages.append(response)
+        print('\nLLM: ', response.content)
 
-"""
-agent = create_agent(
-    model = llm,
-    tools=tools,
-    system_prompt=system_prompt
-    )
+#for i in messages:
+#    print('\n\n', i)
 
 
-#result = agent.invoke({
-#    "messages": [HumanMessage(content="Summarize AI trends")]
-#})
+#please explane what are tools from url https://docs.langchain.com/oss/python/langchain/agents
+#please explane briefly in 3-5 sentences what is Agent state from url https://docs.langchain.com/oss/python/langchain/agents
 
-
-async def main():
-    get_info_input = HumanMessage('Как правильно настроить tools?')
-
-    async for chunk in agent.astream({"messages": [get_info_input]}, stream_mode="updates"):
-        for step, data in chunk.items():
-            print(f"\nstep: {step}")
-            content = data['messages'][-1].content_blocks
-            print(f"content: {(lambda x: 'text' if step == 'tools' else str(content))(step)}")
-
-
-if __name__ == '__main__':
-    asyncio.run(main())
 
 out
-step: model
-content: [{'type': 'tool_call', 'name': 'fetch_url', 'args': {'url': 'https://docs.langchain.com/oss/python/langchain/agents'}, 'id': 'call_uFOh1LwEnja7zT3MtqFHrgfG'}]
+VLAD: please explane briefly in 3-5 sentences what is Agent state from url https://docs.langchain.com/oss/python/langchain/agents
+***переписанный запрос с учетом tools*** : Please briefly explain in 3–5 sentences what “Agent state” means in LangChain agents.
+***длина текста с сайта*** : 52505
 
-step: tools
-content: text
+LLM after tool:  In LangChain agents, “Agent state” is the execution context managed through `AgentState`. `AgentState` is a typed dictionary that holds the current conversation history and any custom fields needed by tools and middleware. Its built-in field is `messages`, which stores the full conversation history for the current thread and is append-only. Middleware hooks receive the current state and can return updates that are merged back into it.
 
-step: model
-content: [{'type': 'text', 'text': 'В LangChain tools настраиваются через параметр `tools=` в `create_agent`.\n\nМинимальный правильный вариант:\n\n```python\nfrom langchain.agents import create_agent\nfrom langchain.tools import tool\n\n\n@tool\ndef search(query: str) -> str:\n    """Search for information."""\n    return f"Results for: {query}"\n\n\nagent = create_agent(\n    model="openai:gpt-5.5",\n    tools=[search],\n)\n```\n\nГлавные правила:\n\n1. **Передавайте tools списком**\n\n```python\ntools=[search, calculator, get_weather]\n```\n\n2. **У tool должны быть понятные аргументы с type hints**\n\n```python\n@tool\ndef get_weather(city: str) -> str:\n    """Get current weather for a city."""\n    ...\n```\n\n3. **Обязательно добавляйте docstring**\n\nDocstring объясняет модели, когда и зачем использовать tool.\n\nПлохо:\n\n```python\n@tool\ndef get_weather(city: str) -> str:\n    return ...\n```\n\nХорошо:\n\n```python\n@tool\ndef get_weather(city: str) -> str:\n    """Get the current weather for a given city."""\n    return ...\n```\n\n4. **Tool должна возвращать строку или сериализуемый результат**\n\n```python\n@tool\ndef add(a: int, b: int) -> int:\n    """Add two numbers."""\n    return a + b\n```\n\n5. **Подключение к агенту**\n\n```python\nagent = create_agent(\n    model="openai:gpt-5.5",\n    tools=[get_weather, add],\n    system_prompt="You are a helpful assistant.",\n)\n```\n\n6. **Вызов агента**\n\n```python\nresult = agent.invoke({\n    "messages": [\n        {"role": "user", "content": "What\'s the weather in Paris?"}\n    ]\n})\n```\n\nLangChain поддерживает в `tools`:\n\n- обычные Python callable;\n- LangChain tools через `@tool`;\n- tool dict.\n\nРекомендуемый способ — использовать `@tool`, потому что LangChain автоматически получает имя, описание и схему аргументов.'}]
+VLAD: are you sure? where did you get it?
 
+LLM:  Yes. I got it from the text you provided, specifically the **“Agent state”** section.
 
+The key lines are:
+
+> “Every agent manages its execution context through AgentState, a typed dictionary that holds the current conversation history and any custom fields your tools and middleware need.”
+
+and:
+
+> “The built-in field is: messages — The full conversation history for the current thread. Append-only: new messages are added, never replaced.”
+
+I also used this line:
+
+> “Hooks receive the current state and can return a dict of updates to merge back into it.”
+
+VLAD: exit
