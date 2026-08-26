@@ -1,0 +1,73 @@
+import asyncio
+
+from langchain.agents import create_agent
+from settings import settings
+from langchain.tools import tool
+from pydantic import BaseModel
+from langchain_openai import ChatOpenAI
+api_key = settings.PROXY_API_KEY
+from langchain_core.messages import HumanMessage
+import requests
+from bs4 import BeautifulSoup
+
+#текст по ссылке
+@tool
+def fetch_url(url:str)->str:
+    """This tool returns from article from the link.
+    always use ONLY this tools if you are asked to get info grom the link."""
+    #парсинг сайта
+    response = requests.get(url, timeout=10.0)
+    soup = BeautifulSoup(response.text, "html.parser")
+    document = soup.get_text()
+    #return 'tools are very good'
+    return document
+
+#LLM модель
+llm = ChatOpenAI(
+    model = 'gpt-5.5',
+    api_key = api_key,
+    base_url = 'https://api.proxyapi.ru/openai/v1'
+)
+
+#агент
+tools = [fetch_url]
+system_prompt="""You are a helpful assistant. Be concise and accurate.
+you answer the questions about langchain agent.
+use this url https://docs.langchain.com/oss/python/langchain/agents to find information about langchain agent.
+
+"""
+agent = create_agent(
+    model = llm,
+    tools=tools,
+    system_prompt=system_prompt
+    )
+
+
+#result = agent.invoke({
+#    "messages": [HumanMessage(content="Summarize AI trends")]
+#})
+
+
+async def main():
+    get_info_input = HumanMessage('Как правильно настроить tools?')
+
+    async for chunk in agent.astream({"messages": [get_info_input]}, stream_mode="updates"):
+        for step, data in chunk.items():
+            print(f"\nstep: {step}")
+            content = data['messages'][-1].content_blocks
+            print(f"content: {(lambda x: 'text' if step == 'tools' else str(content))(step)}")
+
+
+if __name__ == '__main__':
+    asyncio.run(main())
+
+
+out
+step: model
+content: [{'type': 'tool_call', 'name': 'fetch_url', 'args': {'url': 'https://docs.langchain.com/oss/python/langchain/agents'}, 'id': 'call_hqkVYfNjjYFBzNXnSBCWn5mB'}]
+
+step: tools
+content: text
+
+step: model
+content: [{'type': 'text', 'text': 'В LangChain agent `tools` настраиваются через параметр `tools` в `create_agent`.\n\nМинимальный правильный вариант:\n\n```python\nfrom langchain.agents import create_agent\nfrom langchain.tools import tool\n\n\n@tool\ndef search(query: str) -> str:\n    """Search for information."""\n    return f"Results for: {query}"\n\n\nagent = create_agent(\n    model="openai:gpt-5.5",\n    tools=[search],\n)\n```\n\nГлавное:\n\n1. `tools` передаются списком:\n\n```python\ntools=[search]\n```\n\n2. Tool может быть:\n   - обычной Python-функцией,\n   - LangChain tool,\n   - tool dict.\n\n3. У функции должны быть:\n   - понятное имя,\n   - type hints для аргументов,\n   - docstring — агент использует его, чтобы понять, когда вызывать tool.\n\nПример с несколькими tools:\n\n```python\nfrom langchain.agents import create_agent\nfrom langchain.tools import tool\n\n\n@tool\ndef search(query: str) -> str:\n    """Search for information on the web."""\n    return f"Search results for: {query}"\n\n\n@tool\ndef get_weather(city: str) -> str:\n    """Get current weather for a city."""\n    return f"The weather in {city} is sunny."\n\n\nagent = create_agent(\n    model="openai:gpt-5.5",\n    tools=[search, get_weather],\n    system_prompt="You are a helpful assistant. Use tools when needed.",\n)\n```\n\nВызов агента:\n\n```python\nresult = agent.invoke({\n    "messages": [\n        {"role": "user", "content": "Какая погода в Москве?"}\n    ]\n})\n\nprint(result["messages"][-1].content)\n```\n\nПрактические рекомендации:\n\n- Делайте tool маленьким и специализированным.\n- Название функции должно отражать действие: `search`, `get_weather`, `create_ticket`.\n- Docstring должен объяснять, когда использовать tool.\n- Не передавайте результат вызова функции, передавайте саму функцию:\n\n```python\n# правильно\ntools=[search]\n\n# неправильно\ntools=[search("test")]\n```\n\n- Если tool может падать, можно добавить middleware для retry:\n\n```python\nfrom langchain.agents.middleware import ToolRetryMiddleware\n\nagent = create_agent(\n    model="openai:gpt-5.5",\n    tools=[search],\n    middleware=[\n        ToolRetryMiddleware(max_retries=2),\n    ],\n)\n```\n\nИтого: обычно достаточно определить функции через `@tool` и передать их списком в `create_agent(..., tools=[...])`.'}]
